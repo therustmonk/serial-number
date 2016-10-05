@@ -1,3 +1,9 @@
+//! Rust library to generate and check software serial-numbers.
+//!
+//! [Source 1](http://www.brandonstaggs.com/2007/07/26/implementing-a-partial-serial-number-verification-system-in-delphi/)
+//! [Source 2](https://github.com/garethrbrown/.net-licence-key-generator/blob/master/AppSoftware.LicenceEngine.KeyGenerator/PkvLicenceKeyGenerator.cs)
+
+
 use std::fmt;
 use std::mem;
 use std::str;
