@@ -28,6 +28,7 @@ impl From<num::ParseIntError> for Error {
     }
 }
 
+#[derive(Clone)]
 pub struct Secret(Vec<Group<Block>>);
 
 impl str::FromStr for Secret {
@@ -126,7 +127,7 @@ impl str::FromStr for Key {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Group<T> {
     left: T,
     right: T,
@@ -147,6 +148,7 @@ impl fmt::Display for Group<Byte> {
     }
 }
 
+#[derive(Clone)]
 pub struct Block {
     a: Byte,
     b: Byte,
