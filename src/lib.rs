@@ -1,14 +1,49 @@
 use std::fmt;
 use std::mem;
+use std::str;
+use std::u8;
+use std::i64;
+use std::num;
 
 pub type Seed = i64;
 
 pub type Byte = u8;
 
+#[derive(Debug)]
+pub enum Error {
+    NotEnoughItems,
+    InvalidFragment,
+    InvalidFormat,
+}
+
+impl From<num::ParseIntError> for Error {
+    fn from(_: num::ParseIntError) -> Self {
+        Error::InvalidFormat
+    }
+}
+
+#[derive(PartialEq, Debug)]
 pub struct Key {
     seed: Seed,
     groups: Vec<Group<Byte>>,
     checksum: Group<Byte>,
+}
+
+impl Key {
+    pub fn new(seed: Seed, secret: &[Group<Block>]) -> Self {
+        let groups: Vec<Group<Byte>> = secret.iter().map(|g| g.produce(seed)).collect();
+        let checksum = checksum(seed, &groups);
+        Key {
+            seed: seed,
+            groups: groups,
+            checksum: checksum,
+        }
+    }
+
+    pub fn valid(&self, secret: &[Group<Block>]) -> bool {
+        let valid_key = Key::new(self.seed, secret);
+        self == &valid_key
+    }
 }
 
 impl fmt::Display for Key {
@@ -21,12 +56,49 @@ impl fmt::Display for Key {
     }
 }
 
+impl str::FromStr for Key {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let items: Vec<&str> = s.split("-").collect();
+        if items.len() < 3 {
+            return Err(Error::NotEnoughItems);
+        }
+        if let Some((seed, tail)) = items.split_first() {
+            let seed = try!(i64::from_str_radix(&seed, 16));
+            let mut groups = Vec::new();
+            for fragment in tail {
+                if fragment.len() != 4 {
+                    return Err(Error::InvalidFragment);
+                }
+                let left = try!(u8::from_str_radix(&fragment[0..2], 16));
+                let right = try!(u8::from_str_radix(&fragment[2..4], 16));
+                let group = Group {
+                    left: left,
+                    right: right,
+                };
+                groups.push(group);
+            }
+            let checksum = groups.pop().unwrap();
+            let key = Key {
+                seed: seed,
+                groups: groups,
+                checksum: checksum,
+            };
+            Ok(key)
+        } else {
+            Err(Error::NotEnoughItems)
+        }
+    }
+}
+
+#[derive(PartialEq, Debug)]
 pub struct Group<T> {
     left: T,
     right: T,
 }
 
-impl Group<Noise> {
+impl Group<Block> {
     fn produce(&self, seed: Seed) -> Group<Byte> {
         Group {
             left: self.left.produce(seed),
@@ -41,16 +113,16 @@ impl fmt::Display for Group<Byte> {
     }
 }
 
-pub struct Noise {
+pub struct Block {
     a: Byte,
     b: Byte,
     c: Byte,
 }
 
-impl Noise {
+impl Block {
 
     pub fn new(a: Byte, b: Byte, c: Byte) -> Self {
-        Noise {
+        Block {
             a: a,
             b: b,
             c: c,
@@ -61,24 +133,7 @@ impl Noise {
         let a = (seed >> (self.a % 25)) as Byte;
         let b = (seed >> (self.b % 3)) as Byte;
         let c = if self.a % 2 == 0 { b | self.c } else { b & self.c };
-
         a ^ c
-    }
-}
-
-pub struct Generator {
-    noise: Vec<Group<Noise>>,
-}
-
-impl Generator {
-    pub fn make_key(&self, seed: Seed) -> Key {
-        let groups: Vec<Group<Byte>> = self.noise.iter().map(|g| g.produce(seed)).collect();
-        let checksum = checksum(seed, &groups);
-        Key {
-            seed: seed,
-            groups: groups,
-            checksum: checksum,
-        }
     }
 }
 
@@ -116,16 +171,26 @@ fn checksum(seed: Seed, groups: &[Group<Byte>]) -> Group<Byte> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
-    fn it_works() {
+    fn test_generate() {
         let group = Group {
-            left: Noise::new(1,2,3),
-            right: Noise::new(5, 6, 7),
+            left: Block::new(1, 2, 3),
+            right: Block::new(5, 6, 7),
         };
-        let generator = Generator {
-            noise: vec![(group)],
-        };
-        println!("SERIAL KEY IS: {}", generator.make_key(213));
+        let secret = vec![(group)];
+        let key = Key::new(123, &secret);
+        let right_key = Key::from_str("007B-3F00-246A").unwrap();
+        let wrong_key = Key::from_str("007B-3F00-246B").unwrap();
+        assert_eq!(key, right_key);
+        assert!(!wrong_key.valid(&secret));
     }
+
+    #[test]
+    fn test_restore() {
+        let key = Key::from_str("1233-A5B6-4324").unwrap();
+        assert_eq!(&format!("{}", key), "1233-A5B6-4324");
+    }
+
 }
