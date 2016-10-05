@@ -22,6 +22,34 @@ impl From<num::ParseIntError> for Error {
     }
 }
 
+pub struct Secret(Vec<Group<Block>>);
+
+impl str::FromStr for Secret {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let fragments: Vec<&str> = s.split("-").collect();
+        let mut groups = Vec::new();
+        for fragment in fragments {
+            if fragment.len() != 12 {
+                return Err(Error::InvalidFragment);
+            }
+            let left_a = try!(u8::from_str_radix(&fragment[0..2], 16));
+            let left_b = try!(u8::from_str_radix(&fragment[2..4], 16));
+            let left_c = try!(u8::from_str_radix(&fragment[4..6], 16));
+            let right_a = try!(u8::from_str_radix(&fragment[6..8], 16));
+            let right_b = try!(u8::from_str_radix(&fragment[8..10], 16));
+            let right_c = try!(u8::from_str_radix(&fragment[10..12], 16));
+            let group = Group {
+                left: Block::new(left_a, left_b, left_c),
+                right: Block::new(right_a, right_b, right_c),
+            };
+            groups.push(group);
+        }
+        Ok(Secret(groups))
+    }
+}
+
 #[derive(PartialEq, Debug)]
 pub struct Key {
     seed: Seed,
@@ -30,8 +58,8 @@ pub struct Key {
 }
 
 impl Key {
-    pub fn new(seed: Seed, secret: &[Group<Block>]) -> Self {
-        let groups: Vec<Group<Byte>> = secret.iter().map(|g| g.produce(seed)).collect();
+    pub fn new(seed: Seed, &Secret(ref blocks): &Secret) -> Self {
+        let groups: Vec<Group<Byte>> = blocks.iter().map(|g| g.produce(seed)).collect();
         let checksum = checksum(seed, &groups);
         Key {
             seed: seed,
@@ -40,7 +68,7 @@ impl Key {
         }
     }
 
-    pub fn valid(&self, secret: &[Group<Block>]) -> bool {
+    pub fn valid(&self, secret: &Secret) -> bool {
         let valid_key = Key::new(self.seed, secret);
         self == &valid_key
     }
@@ -175,14 +203,10 @@ mod tests {
 
     #[test]
     fn test_generate() {
-        let group = Group {
-            left: Block::new(1, 2, 3),
-            right: Block::new(5, 6, 7),
-        };
-        let secret = vec![(group)];
+        let secret = Secret::from_str("0A6BBFAA6793-ABB734930FCD").unwrap();
         let key = Key::new(123, &secret);
-        let right_key = Key::from_str("007B-3F00-246A").unwrap();
-        let wrong_key = Key::from_str("007B-3F00-246B").unwrap();
+        let right_key = Key::from_str("007B-BFBF-3049-E324").unwrap();
+        let wrong_key = Key::from_str("0070-BFBF-3049-E324").unwrap();
         assert_eq!(key, right_key);
         assert!(!wrong_key.valid(&secret));
     }
