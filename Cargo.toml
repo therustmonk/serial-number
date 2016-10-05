@@ -1,0 +1,10 @@
+[package]
+name = "serial-number"
+version = "0.1.0"
+readme = "README.md"
+authors = ["Denis Kolodin <deniskolodin@gmail.com>"]
+description = "Library implements serial-numbers to protect software (PKVS)."
+repository = "https://github.com/DenisKolodin/serial-number"
+license = "MIT/Apache-2.0"
+
+[dependencies]
