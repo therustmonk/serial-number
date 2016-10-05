@@ -10,6 +10,7 @@ use std::str;
 use std::u8;
 use std::i64;
 use std::num;
+use std::error;
 
 pub type Seed = i64;
 
@@ -20,6 +21,28 @@ pub enum Error {
     NotEnoughItems,
     InvalidFragment,
     InvalidFormat,
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::NotEnoughItems => "not enough items",
+            Error::InvalidFragment => "invalid fragment",
+            Error::InvalidFormat => "invalid format",
+        }
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        None
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use std::error::Error;
+
+        write!(f, "{}", self.description())
+    }
 }
 
 impl From<num::ParseIntError> for Error {
