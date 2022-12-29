@@ -5,7 +5,6 @@
 
 use std::fmt;
 use std::i64;
-use std::mem;
 use std::str;
 use std::u8;
 use thiserror::Error;
@@ -73,7 +72,11 @@ pub struct Key {
 
 impl Key {
     pub fn create(seed: Seed, secret: &Secret) -> Result<Self, Error> {
-        let groups: Vec<Group<Byte>> = secret.groups.iter().map(|g| g.produce(seed)).collect();
+        let groups: Vec<Group<Byte>> = secret
+            .groups
+            .iter()
+            .map(|g| g.produce(seed))
+            .collect::<Result<_, _>>()?;
         let checksum = checksum(seed, &groups)?;
         Ok(Key {
             seed: seed,
@@ -142,11 +145,11 @@ pub struct Group<T> {
 }
 
 impl Group<Block> {
-    fn produce(&self, seed: Seed) -> Group<Byte> {
-        Group {
-            left: self.left.produce(seed),
-            right: self.right.produce(seed),
-        }
+    fn produce(&self, seed: Seed) -> Result<Group<Byte>, Error> {
+        Ok(Group {
+            left: self.left.produce(seed)?,
+            right: self.right.produce(seed)?,
+        })
     }
 }
 
@@ -168,15 +171,15 @@ impl Block {
         Block { a: a, b: b, c: c }
     }
 
-    fn produce(&self, seed: Seed) -> Byte {
-        let a = (seed >> (self.a % 25)) as Byte;
-        let b = (seed >> (self.b % 3)) as Byte;
+    fn produce(&self, seed: Seed) -> Result<Byte, Error> {
+        let a: u8 = (seed >> (self.a % 25)).try_into()?;
+        let b: u8 = (seed >> (self.b % 3)).try_into()?;
         let c = if self.a % 2 == 0 {
             b | self.c
         } else {
             b & self.c
         };
-        a ^ c
+        Ok(a ^ c)
     }
 }
 
