@@ -28,12 +28,21 @@ pub enum Error {
 #[derive(Clone)]
 pub struct Secret {
     /// Groups of blocks
-    groups: Vec<Group<Block>>,
+    pairs: Vec<Pair<Block>>,
 }
 
 impl fmt::Display for Secret {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
+        let mut iter = self.pairs.iter();
+        let mut first = true;
+        while let Some(pair) = iter.next() {
+            if !first {
+                write!(f, "-")?;
+            }
+            first = false;
+            write!(f, "{}", pair)?;
+        }
+        Ok(())
     }
 }
 
@@ -42,7 +51,7 @@ impl str::FromStr for Secret {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let fragments: Vec<&str> = s.split("-").collect();
-        let mut groups = Vec::new();
+        let mut pairs = Vec::new();
         for fragment in fragments {
             if fragment.len() != 12 {
                 return Err(Error::InvalidFragment);
@@ -53,34 +62,34 @@ impl str::FromStr for Secret {
             let right_a = u8::from_str_radix(&fragment[6..8], 16)?;
             let right_b = u8::from_str_radix(&fragment[8..10], 16)?;
             let right_c = u8::from_str_radix(&fragment[10..12], 16)?;
-            let group = Group {
+            let pair = Pair {
                 left: Block::new(left_a, left_b, left_c),
                 right: Block::new(right_a, right_b, right_c),
             };
-            groups.push(group);
+            pairs.push(pair);
         }
-        Ok(Secret { groups })
+        Ok(Secret { pairs })
     }
 }
 
 #[derive(PartialEq, Debug)]
 pub struct Key {
     seed: Seed,
-    groups: Vec<Group<Byte>>,
-    checksum: Group<Byte>,
+    pairs: Vec<Pair<Byte>>,
+    checksum: Pair<Byte>,
 }
 
 impl Key {
     pub fn create(seed: Seed, secret: &Secret) -> Result<Self, Error> {
-        let groups: Vec<Group<Byte>> = secret
-            .groups
+        let pairs: Vec<Pair<Byte>> = secret
+            .pairs
             .iter()
             .map(|g| g.produce(seed))
             .collect::<Result<_, _>>()?;
-        let checksum = checksum(seed, &groups)?;
+        let checksum = checksum(seed, &pairs)?;
         Ok(Key {
             seed: seed,
-            groups: groups,
+            pairs: pairs,
             checksum: checksum,
         })
     }
@@ -95,8 +104,8 @@ impl Key {
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:04X}", self.seed)?;
-        for group in &self.groups {
-            write!(f, "-{}", group)?;
+        for pair in &self.pairs {
+            write!(f, "-{}", pair)?;
         }
         write!(f, "-{}", self.checksum)
     }
@@ -112,23 +121,23 @@ impl str::FromStr for Key {
         }
         if let Some((seed, tail)) = items.split_first() {
             let seed = i64::from_str_radix(&seed, 16)?;
-            let mut groups = Vec::new();
+            let mut pairs = Vec::new();
             for fragment in tail {
                 if fragment.len() != 4 {
                     return Err(Error::InvalidFragment);
                 }
                 let left = u8::from_str_radix(&fragment[0..2], 16)?;
                 let right = u8::from_str_radix(&fragment[2..4], 16)?;
-                let group = Group {
+                let pair = Pair {
                     left: left,
                     right: right,
                 };
-                groups.push(group);
+                pairs.push(pair);
             }
-            let checksum = groups.pop().unwrap();
+            let checksum = pairs.pop().unwrap();
             let key = Key {
                 seed: seed,
-                groups: groups,
+                pairs: pairs,
                 checksum: checksum,
             };
             Ok(key)
@@ -139,23 +148,29 @@ impl str::FromStr for Key {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Group<T> {
+pub struct Pair<T> {
     left: T,
     right: T,
 }
 
-impl Group<Block> {
-    fn produce(&self, seed: Seed) -> Result<Group<Byte>, Error> {
-        Ok(Group {
+impl Pair<Block> {
+    fn produce(&self, seed: Seed) -> Result<Pair<Byte>, Error> {
+        Ok(Pair {
             left: self.left.produce(seed)?,
             right: self.right.produce(seed)?,
         })
     }
 }
 
-impl fmt::Display for Group<Byte> {
+impl fmt::Display for Pair<Byte> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:02X}{:02X}", self.left, self.right)
+    }
+}
+
+impl fmt::Display for Pair<Block> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}{}", self.left, self.right)
     }
 }
 
@@ -164,6 +179,12 @@ pub struct Block {
     a: Byte,
     b: Byte,
     c: Byte,
+}
+
+impl fmt::Display for Block {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:02X}{:02X}{:02X}", self.a, self.b, self.c)
+    }
 }
 
 impl Block {
@@ -183,7 +204,7 @@ impl Block {
     }
 }
 
-fn checksum(seed: Seed, groups: &[Group<Byte>]) -> Result<Group<Byte>, Error> {
+fn checksum(seed: Seed, pairs: &[Pair<Byte>]) -> Result<Pair<Byte>, Error> {
     let mut left: u16 = 0x56;
     let mut right: u16 = 0xAF;
     {
@@ -204,11 +225,11 @@ fn checksum(seed: Seed, groups: &[Group<Byte>]) -> Result<Group<Byte>, Error> {
         };
         let bytes: [u8; 8] = seed.to_be_bytes();
         update(&bytes);
-        for item in groups {
+        for item in pairs {
             update(&[item.left, item.right]);
         }
     }
-    Ok(Group {
+    Ok(Pair {
         left: left.try_into()?,
         right: right.try_into()?,
     })
