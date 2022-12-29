@@ -3,14 +3,13 @@
 //! [Source 1](http://www.brandonstaggs.com/2007/07/26/implementing-a-partial-serial-number-verification-system-in-delphi/)
 //! [Source 2](https://github.com/garethrbrown/.net-licence-key-generator/blob/master/AppSoftware.LicenceEngine.KeyGenerator/PkvLicenceKeyGenerator.cs)
 
-
+use std::error;
 use std::fmt;
+use std::i64;
 use std::mem;
+use std::num;
 use std::str;
 use std::u8;
-use std::i64;
-use std::num;
-use std::error;
 
 pub type Seed = i64;
 
@@ -32,16 +31,14 @@ impl error::Error for Error {
         }
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         None
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use std::error::Error;
-
-        write!(f, "{}", self.description())
+        write!(f, "{}", self)
     }
 }
 
@@ -64,12 +61,12 @@ impl str::FromStr for Secret {
             if fragment.len() != 12 {
                 return Err(Error::InvalidFragment);
             }
-            let left_a = try!(u8::from_str_radix(&fragment[0..2], 16));
-            let left_b = try!(u8::from_str_radix(&fragment[2..4], 16));
-            let left_c = try!(u8::from_str_radix(&fragment[4..6], 16));
-            let right_a = try!(u8::from_str_radix(&fragment[6..8], 16));
-            let right_b = try!(u8::from_str_radix(&fragment[8..10], 16));
-            let right_c = try!(u8::from_str_radix(&fragment[10..12], 16));
+            let left_a = u8::from_str_radix(&fragment[0..2], 16)?;
+            let left_b = u8::from_str_radix(&fragment[2..4], 16)?;
+            let left_c = u8::from_str_radix(&fragment[4..6], 16)?;
+            let right_a = u8::from_str_radix(&fragment[6..8], 16)?;
+            let right_b = u8::from_str_radix(&fragment[8..10], 16)?;
+            let right_c = u8::from_str_radix(&fragment[10..12], 16)?;
             let group = Group {
                 left: Block::new(left_a, left_b, left_c),
                 right: Block::new(right_a, right_b, right_c),
@@ -106,9 +103,9 @@ impl Key {
 
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{:04X}", self.seed));
+        write!(f, "{:04X}", self.seed)?;
         for group in &self.groups {
-            try!(write!(f, "-{}", group));
+            write!(f, "-{}", group)?;
         }
         write!(f, "-{}", self.checksum)
     }
@@ -123,14 +120,14 @@ impl str::FromStr for Key {
             return Err(Error::NotEnoughItems);
         }
         if let Some((seed, tail)) = items.split_first() {
-            let seed = try!(i64::from_str_radix(&seed, 16));
+            let seed = i64::from_str_radix(&seed, 16)?;
             let mut groups = Vec::new();
             for fragment in tail {
                 if fragment.len() != 4 {
                     return Err(Error::InvalidFragment);
                 }
-                let left = try!(u8::from_str_radix(&fragment[0..2], 16));
-                let right = try!(u8::from_str_radix(&fragment[2..4], 16));
+                let left = u8::from_str_radix(&fragment[0..2], 16)?;
+                let right = u8::from_str_radix(&fragment[2..4], 16)?;
                 let group = Group {
                     left: left,
                     right: right,
@@ -179,19 +176,18 @@ pub struct Block {
 }
 
 impl Block {
-
     pub fn new(a: Byte, b: Byte, c: Byte) -> Self {
-        Block {
-            a: a,
-            b: b,
-            c: c,
-        }
+        Block { a: a, b: b, c: c }
     }
 
     fn produce(&self, seed: Seed) -> Byte {
         let a = (seed >> (self.a % 25)) as Byte;
         let b = (seed >> (self.b % 3)) as Byte;
-        let c = if self.a % 2 == 0 { b | self.c } else { b & self.c };
+        let c = if self.a % 2 == 0 {
+            b | self.c
+        } else {
+            b & self.c
+        };
         a ^ c
     }
 }
@@ -247,5 +243,4 @@ mod tests {
         let key = Key::from_str("1233-A5B6-4324").unwrap();
         assert_eq!(&format!("{}", key), "1233-A5B6-4324");
     }
-
 }

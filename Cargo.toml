@@ -1,6 +1,7 @@
 [package]
 name = "serial-number"
 version = "0.1.1"
+edition = "2021"
 authors = ["Denis Kolodin <deniskolodin@gmail.com>"]
 readme = "README.md"
 description = "Library implements serial-numbers to protect software (PKVS)."
