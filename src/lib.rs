@@ -3,49 +3,25 @@
 //! [Source 1](http://www.brandonstaggs.com/2007/07/26/implementing-a-partial-serial-number-verification-system-in-delphi/)
 //! [Source 2](https://github.com/garethrbrown/.net-licence-key-generator/blob/master/AppSoftware.LicenceEngine.KeyGenerator/PkvLicenceKeyGenerator.cs)
 
-use std::error;
 use std::fmt;
 use std::i64;
 use std::mem;
-use std::num;
 use std::str;
 use std::u8;
+use thiserror::Error;
 
 pub type Seed = i64;
 
 pub type Byte = u8;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
+    #[error("not enough items")]
     NotEnoughItems,
+    #[error("invalid fragment")]
     InvalidFragment,
-    InvalidFormat,
-}
-
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::NotEnoughItems => "not enough items",
-            Error::InvalidFragment => "invalid fragment",
-            Error::InvalidFormat => "invalid format",
-        }
-    }
-
-    fn cause(&self) -> Option<&dyn error::Error> {
-        None
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-impl From<num::ParseIntError> for Error {
-    fn from(_: num::ParseIntError) -> Self {
-        Error::InvalidFormat
-    }
+    #[error("invalid format: {0}")]
+    InvalidFormat(#[from] std::num::ParseIntError),
 }
 
 #[derive(Clone)]

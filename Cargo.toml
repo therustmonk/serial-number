@@ -9,3 +9,4 @@ repository = "https://github.com/DenisKolodin/serial-number"
 license = "MIT/Apache-2.0"
 
 [dependencies]
+thiserror = "1.0.38"
