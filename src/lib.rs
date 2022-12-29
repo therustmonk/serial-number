@@ -22,12 +22,20 @@ pub enum Error {
     InvalidFragment,
     #[error("invalid format: {0}")]
     InvalidFormat(#[from] std::num::ParseIntError),
+    #[error("invalid int: {0}")]
+    InvalidInt(#[from] std::num::TryFromIntError),
 }
 
 #[derive(Clone)]
 pub struct Secret {
     /// Groups of blocks
     groups: Vec<Group<Block>>,
+}
+
+impl fmt::Display for Secret {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
 }
 
 impl str::FromStr for Secret {
@@ -64,19 +72,20 @@ pub struct Key {
 }
 
 impl Key {
-    pub fn new(seed: Seed, secret: &Secret) -> Self {
+    pub fn create(seed: Seed, secret: &Secret) -> Result<Self, Error> {
         let groups: Vec<Group<Byte>> = secret.groups.iter().map(|g| g.produce(seed)).collect();
-        let checksum = checksum(seed, &groups);
-        Key {
+        let checksum = checksum(seed, &groups)?;
+        Ok(Key {
             seed: seed,
             groups: groups,
             checksum: checksum,
-        }
+        })
     }
 
     pub fn valid(&self, secret: &Secret) -> bool {
-        let valid_key = Key::new(self.seed, secret);
-        self == &valid_key
+        Key::create(self.seed, secret)
+            .map(|valid_key| self == &valid_key)
+            .unwrap_or_default()
     }
 }
 
@@ -171,7 +180,7 @@ impl Block {
     }
 }
 
-fn checksum(seed: Seed, groups: &[Group<Byte>]) -> Group<Byte> {
+fn checksum(seed: Seed, groups: &[Group<Byte>]) -> Result<Group<Byte>, Error> {
     let mut left: u16 = 0x56;
     let mut right: u16 = 0xAF;
     {
@@ -190,16 +199,16 @@ fn checksum(seed: Seed, groups: &[Group<Byte>]) -> Group<Byte> {
                 }
             }
         };
-        let bytes: [u8; 8] = unsafe { mem::transmute(seed.to_be()) };
+        let bytes: [u8; 8] = seed.to_be_bytes();
         update(&bytes);
         for item in groups {
             update(&[item.left, item.right]);
         }
     }
-    Group {
-        left: left as Byte,
-        right: right as Byte,
-    }
+    Ok(Group {
+        left: left.try_into()?,
+        right: right.try_into()?,
+    })
 }
 
 #[cfg(test)]
@@ -210,7 +219,7 @@ mod tests {
     #[test]
     fn test_validation() {
         let secret = Secret::from_str("0A6BBFAA6793-ABB734930FCD").unwrap();
-        let key = Key::new(123, &secret);
+        let key = Key::create(123, &secret).unwrap();
         let right_key = Key::from_str("007B-BFBF-3049-E324").unwrap();
         let wrong_key = Key::from_str("0070-BFBF-3049-E324").unwrap();
         assert_eq!(key, right_key);
@@ -219,7 +228,12 @@ mod tests {
 
     #[test]
     fn test_format() {
-        let key = Key::from_str("1233-A5B6-4324").unwrap();
-        assert_eq!(&format!("{}", key), "1233-A5B6-4324");
+        const SECRET: &str = "0A6BBFAA6793-ABB734930FCD";
+        let secret = Secret::from_str(SECRET).unwrap();
+        assert_eq!(&format!("{}", secret), SECRET);
+
+        const KEY: &str = "1233-A5B6-4324";
+        let key = Key::from_str(KEY).unwrap();
+        assert_eq!(&format!("{}", key), KEY);
     }
 }
