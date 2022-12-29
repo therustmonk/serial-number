@@ -25,7 +25,10 @@ pub enum Error {
 }
 
 #[derive(Clone)]
-pub struct Secret(Vec<Group<Block>>);
+pub struct Secret {
+    /// Groups of blocks
+    groups: Vec<Group<Block>>,
+}
 
 impl str::FromStr for Secret {
     type Err = Error;
@@ -49,7 +52,7 @@ impl str::FromStr for Secret {
             };
             groups.push(group);
         }
-        Ok(Secret(groups))
+        Ok(Secret { groups })
     }
 }
 
@@ -61,8 +64,8 @@ pub struct Key {
 }
 
 impl Key {
-    pub fn new(seed: Seed, &Secret(ref blocks): &Secret) -> Self {
-        let groups: Vec<Group<Byte>> = blocks.iter().map(|g| g.produce(seed)).collect();
+    pub fn new(seed: Seed, secret: &Secret) -> Self {
+        let groups: Vec<Group<Byte>> = secret.groups.iter().map(|g| g.produce(seed)).collect();
         let checksum = checksum(seed, &groups);
         Key {
             seed: seed,
@@ -205,7 +208,7 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn test_generate() {
+    fn test_validation() {
         let secret = Secret::from_str("0A6BBFAA6793-ABB734930FCD").unwrap();
         let key = Key::new(123, &secret);
         let right_key = Key::from_str("007B-BFBF-3049-E324").unwrap();
@@ -215,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn test_restore() {
+    fn test_format() {
         let key = Key::from_str("1233-A5B6-4324").unwrap();
         assert_eq!(&format!("{}", key), "1233-A5B6-4324");
     }
